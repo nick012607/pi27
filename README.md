@@ -1,4 +1,4 @@
-# PI27 — Ironman Mission Control · App-pakket
+# PI27 — Ironman Mission Control · App-pakket 
 
 Dit pakket bevat de telefoon-app van jullie Ironman-dashboard.
 Bestanden: `index.html` (de app), `manifest.json`, `sw.js`, iconen, `scan-proxy-worker.js` (voor de AI-scan).
