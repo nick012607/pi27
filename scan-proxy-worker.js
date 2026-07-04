@@ -1,7 +1,7 @@
 // Cloudflare Worker: veilige proxy voor de AI-fotoscan in de losse app/PWA-versie.
 // 1) Maak gratis account op workers.cloudflare.com  2) Nieuwe Worker, plak deze code
 // 3) Voeg in Settings > Variables een secret toe: ANTHROPIC_API_KEY (van console.anthropic.com)
-// 4) Deploy; vul de Worker-URL in bij SCAN_PROXY_URL bovenin index.html
+// 4) Deploy; vul de Worker-URL in bij SCAN_PROXY_URL bovenin index.html 
 export default {
   async fetch(request, env) {
     const cors = {
