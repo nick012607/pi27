@@ -1,7 +1,7 @@
 {
   "name": "PI27 — Ironman Mission Control",
   "short_name": "PI27",
-  "description": "Trainings-dashboard voor Project Ironman van Nick & Omar",
+  "description": "Trainings-dashboard voor Project Ironman van Nick & Omar", 
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
