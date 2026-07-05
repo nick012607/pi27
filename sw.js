@@ -1,5 +1,5 @@
 // PI27 service worker — bump VERSION bij elke update zodat telefoons de nieuwe versie ophalen
-const VERSION = 'pi27-v4';
+const VERSION = 'pi27-v5';
 const ASSETS = ['./index.html','./manifest.json','./icon-192.png','./icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

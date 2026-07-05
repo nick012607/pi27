@@ -1,4 +1,4 @@
-<!DOCTYPE html> 
+<!DOCTYPE html>
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
@@ -255,6 +255,11 @@ input[type=range]:focus-visible{outline:2px solid var(--aqua);outline-offset:2px
 .costrow .del{background:none;border:0;color:var(--mut);cursor:pointer;font-size:15px;border-radius:7px}
 .costrow .del:hover{color:var(--red)}
 @media(max-width:760px){.costrow{grid-template-columns:1fr 80px;grid-auto-rows:auto}.costrow .est{grid-column:2}}
+
+.coachout{white-space:pre-wrap;font-size:14px;line-height:1.65;color:var(--text);margin-top:14px;display:none}
+.wchart{width:100%;height:90px;margin-top:10px}
+.report{font-size:13.5px;color:var(--mut);line-height:1.8}
+.report b{color:var(--text);font-family:var(--mono)}
 footer{padding:34px 56px 54px;color:var(--mut);font-size:12.5px;border-top:1px solid var(--line)}
 @media(max-width:900px){footer{padding:28px 20px 44px}}
 </style>
@@ -344,6 +349,15 @@ footer{padding:34px 56px 54px;color:var(--mut);font-size:12.5px;border-top:1px s
     <div class="confirmed" id="confirmed" style="font-size:clamp(20px,3vw,28px)"></div>
     <div class="signname" id="signview" style="display:none">&nbsp;</div>
   </div>
+  <div class="racecfg panel" style="margin-top:18px">
+    <div class="kick" style="margin-bottom:12px">Back-up</div>
+    <div class="note" style="margin-bottom:12px">Je logboek, kosten en profiel staan op dit toestel. Maak af en toe een back-up-bestand — bij een nieuwe telefoon of gewiste browserdata zet je alles zo terug.</div>
+    <button class="btn sec sm" id="expbtn">&#8595; Exporteer back-up</button>
+    <label class="btn sec sm" for="impfile" style="margin-left:8px">&#8593; Herstel back-up</label>
+    <input type="file" id="impfile" accept=".json,application/json" style="display:none">
+    <div class="note" id="bakmsg" style="margin-top:10px"></div>
+  </div>
+
 
 </div>
 
@@ -477,6 +491,26 @@ footer{padding:34px 56px 54px;color:var(--mut);font-size:12.5px;border-top:1px s
         <div class="phlegend"><span><i style="background:var(--panel2);border:1px solid var(--line)"></i>Gepland</span><span><i style="background:var(--aqua)"></i>Getraind</span><span id="fbwho" style="margin-left:auto"></span></div>
         <div id="feedback"></div>
         <div class="panel" style="margin-top:16px">
+          <div class="kick" style="margin-bottom:10px">Weekrapport</div>
+          <div class="report" id="wkreport">&ndash;</div>
+        </div>
+        <div class="panel" style="margin-top:16px">
+          <div class="kick" style="margin-bottom:10px">AI-coach</div>
+          <div class="note">De coach kijkt naar je afgelopen trainingsweken, je energiebalans en wat er komende week op het plan staat, en geeft persoonlijk advies.</div>
+          <button class="btn" id="coach" style="margin-top:12px">Vraag de coach om advies</button>
+          <div class="note" id="coachmsg" style="margin-top:10px"></div>
+          <div class="coachout" id="coachout"></div>
+        </div>
+        <div class="panel" style="margin-top:16px">
+          <div class="kick" style="margin-bottom:10px">Gewichtstrend</div>
+          <div class="cfggrid" style="grid-template-columns:1fr auto">
+            <div class="field"><label for="wtoday">Gewicht vandaag (kg)</label><input type="number" id="wtoday" min="40" max="160" step="0.1"></div>
+            <div><button class="btn sec" id="wsave">Opslaan</button></div>
+          </div>
+          <svg class="wchart" id="wchart" viewBox="0 0 600 90" preserveAspectRatio="none" aria-label="Gewichtsverloop"></svg>
+          <div class="note" id="wnote"></div>
+        </div>
+        <div class="panel" style="margin-top:16px">
           <div class="kick" style="margin-bottom:10px">Laatste sessies</div>
           <div id="loglist"><div class="note">Nog geen trainingen gelogd.</div></div>
         </div>
@@ -498,7 +532,7 @@ footer{padding:34px 56px 54px;color:var(--mut);font-size:12.5px;border-top:1px s
     <p class="lead">Maak een foto van je bord en de AI schat calorie&euml;n en voedingsstoffen. Werkt binnen Claude; test alles wat je eet in trainingsweken.</p>
     <div class="scangrid">
       <div class="panel">
-        <div class="note" style="margin-bottom:10px">Scanstatus: <span class="st" id="scanstate">&hellip;</span> &middot; app v3.1</div>
+        <div class="note" style="margin-bottom:10px">Scanstatus: <span class="st" id="scanstate">&hellip;</span> &middot; app v4.0</div>
         <label class="drop" id="drop" for="foto">
           <img id="preview" alt="" style="display:none">
           <div id="droptxt">&#128247; Tik hier om een foto te kiezen<br><span class="note">bord, maaltijd of snack</span></div>
@@ -624,7 +658,7 @@ async function kvSet(key, val, shared){
 let S = {
   config: { name:'Ironman European Championship Hamburg', date:'2027-06-06', time:'06:30', planStart: isoDay(mondayOf(new Date())) },
   logs: [], meals: [], confirmedName: null, me: null,
-  profile: null, costs: null, proxy: '',
+  profile: null, costs: null, proxy: '', weights: [],
   ath: { N:{swim:140,t1:8,bike:28,t2:6,run:390}, O:{swim:145,t1:8,bike:27,t2:6,run:405} }
 };
 const saveCfg = () => kvSet('pi27-config', S.config, true);
@@ -636,6 +670,7 @@ const saveMe = () => kvSet('pi27-me', S.me, false);
 const saveProfile = () => kvSet('pi27-profile', S.profile, false);
 const saveCosts = () => kvSet('pi27-costs', S.costs, false);
 const saveProxy = () => kvSet('pi27-proxy', S.proxy, false);
+const saveWeights = () => kvSet('pi27-weights', S.weights, false);
 function bmr(){
   const p=S.profile; if(!p) return null;
   return Math.round(10*p.w + 6.25*p.h - 5*p.age + (p.sex==='v'?-161:5));
@@ -978,7 +1013,38 @@ function paintProgress(){
   $('loglist').querySelectorAll('.del').forEach(b=>b.onclick=()=>{
     S.logs=S.logs.filter(l=>l.id!==+b.dataset.id); saveLogs(); paintProgress();
   });
+
+  // weekrapport: deze week vs vorige week
+  const sumW=ts=>{const ls=logs.filter(l=>mondayOf(new Date(l.date+'T12:00')).getTime()===ts);
+    return {h:ls.reduce((a,l)=>a+l.min,0)/60, km:ls.reduce((a,l)=>a+l.km,0), kc:ls.reduce((a,l)=>a+burnFor(l),0), n:ls.length};};
+  const tw=sumW(nowMon), lw=sumW(nowMon-7*864e5);
+  const pct=(a,b)=>b>0?Math.round((a-b)/b*100):null;
+  const d=pct(tw.h,lw.h);
+  $('wkreport').innerHTML =
+    'Deze week: <b>'+tw.h.toFixed(1).replace('.',',')+' u</b> · <b>'+Math.round(tw.km)+' km</b> · <b>'+Math.round(tw.kc)+' kcal</b> · <b>'+tw.n+'</b> sessies<br>'+
+    'Vorige week: <b>'+lw.h.toFixed(1).replace('.',',')+' u</b> · <b>'+Math.round(lw.km)+' km</b> · <b>'+Math.round(lw.kc)+' kcal</b> · <b>'+lw.n+'</b> sessies'+
+    (d===null?'':'<br>Volume '+(d>=0?'+':'')+d+'% t.o.v. vorige week'+(plannedNow!==null?' · plan deze week: '+String(plannedNow).replace('.',',')+' u':''));
+  paintWeights();
 }
+function paintWeights(){
+  const ws=[...(S.weights||[])].sort((a,b)=>a.date.localeCompare(b.date));
+  const svg=$('wchart');
+  if(!ws.length){ svg.innerHTML=''; $('wnote').textContent='Nog geen metingen. Vul je gewicht in en volg de trend richting racedag.'; return; }
+  const vals=ws.map(w=>w.kg), min=Math.min(...vals)-1, max=Math.max(...vals)+1;
+  const pts=ws.map((w,i)=>[(ws.length<2?300:i/(ws.length-1)*580+10), 80-(w.kg-min)/(max-min)*70]);
+  svg.innerHTML='<polyline fill="none" stroke="#3BBFC6" stroke-width="2.5" points="'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')+'"/>'
+    + pts.map(p=>'<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="3.5" fill="#3BBFC6"/>').join('');
+  const first=ws[0].kg, last=ws[ws.length-1].kg, diff=Math.round((last-first)*10)/10;
+  $('wnote').textContent='Laatste meting: '+String(last).replace('.',',')+' kg ('+ws[ws.length-1].date+')'+(ws.length>1?' · '+(diff>0?'+':'')+String(diff).replace('.',',')+' kg sinds de eerste meting':'');
+}
+$('wsave').onclick=()=>{
+  const kg=+$('wtoday').value; if(!kg||kg<40||kg>160) return;
+  const today=isoDay(new Date());
+  S.weights=(S.weights||[]).filter(w=>w.date!==today);
+  S.weights.push({date:today, kg:Math.round(kg*10)/10});
+  if(S.profile){ S.profile.w=Math.round(kg); saveProfile(); }   // verbrandingsberekening gebruikt nieuwste gewicht
+  saveWeights(); paintWeights(); paintProgress();
+};
 $('lgwho').addEventListener('change', paintProgress);
 
 /* ================= NUTRITION CALC ================= */
@@ -1150,6 +1216,79 @@ $('kadd').onclick=()=>{
   $('kname').value=''; saveCosts(); renderCosts();
 };
 
+
+/* ================= AI COACH ================= */
+function coachContext(){
+  const who=S.me||'N', logs=S.logs.filter(l=>l.who===who);
+  const nowMon=mondayOf(new Date()).getTime();
+  const wk=ts=>logs.filter(l=>mondayOf(new Date(l.date+'T12:00')).getTime()===ts);
+  const fmt=ls=>ls.map(l=>l.date+' '+DISC[l.disc]+' '+(l.km?l.km+'km ':'')+l.min+'min').join('; ')||'geen';
+  const planned=[0,-1,-2].map(k=>{const p=PLAN.find(x=>x.monday.getTime()===nowMon+k*7*864e5);return p?p.hours:null;});
+  const nextWk=PLAN.find(x=>x.monday.getTime()===nowMon+7*864e5);
+  const today=isoDay(new Date());
+  const kcalIn=S.meals.filter(m=>m.date===today).reduce((a,m)=>a+m.kcal,0);
+  const kcalSport=logs.filter(l=>l.date===today).reduce((a,l)=>a+burnFor(l),0);
+  const wl=[...(S.weights||[])].sort((a,b)=>a.date.localeCompare(b.date)).slice(-5);
+  return 'Atleet: '+(who==='N'?'Nick':'Omar')
+    +'. Profiel: '+(S.profile?S.profile.age+' jaar, '+S.profile.w+' kg, '+S.profile.h+' cm':'onbekend')
+    +'. Doel: '+S.config.name+' op '+S.config.date
+    +'. Weken tot race: '+Math.max(0,Math.round((raceTS()-Date.now())/(7*864e5)))
+    +'. Trainingen deze week: '+fmt(wk(nowMon))
+    +'. Vorige week: '+fmt(wk(nowMon-7*864e5))
+    +'. Twee weken terug: '+fmt(wk(nowMon-14*864e5))
+    +'. Geplande uren (deze, vorige, 2 terug): '+planned.join(', ')
+    +'. Volgende week gepland: '+(nextWk?nextWk.hours+' uur, fase '+nextWk.phase:'onbekend')
+    +'. Vandaag: '+kcalIn+' kcal gegeten (gescand), '+kcalSport+' kcal versport, rustverbranding '+(bmr()||'onbekend')
+    +'. Gewichtsmetingen: '+(wl.map(w=>w.date+' '+w.kg+'kg').join('; ')||'geen');
+}
+$('coach').onclick=async()=>{
+  const proxyURL=(S.proxy||SCAN_PROXY_URL||'').trim();
+  if(mode!=='claude' && !proxyURL){ $('coachmsg').textContent='De coach gebruikt dezelfde AI-verbinding als de scan — die is nog niet ingesteld.'; return; }
+  const btn=$('coach'); btn.disabled=true; btn.innerHTML='<span class="spin"></span>&nbsp; Coach denkt na…'; $('coachmsg').textContent='';
+  try{
+    const resp=await fetch(mode==='claude'?'https://api.anthropic.com/v1/messages':proxyURL,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-6', max_tokens:1000,
+        messages:[{role:'user',content:'Je bent een nuchtere Nederlandse triatloncoach voor twee beginners die naar een volledige Ironman toewerken. Hier is de actuele data van de atleet: '+coachContext()+' \n\nGeef kort, concreet en persoonlijk advies in het Nederlands: 1) hoe staat het traject ervoor, 2) wat is het belangrijkste aandachtspunt voor komende week (concreet, met dagen of afstanden), 3) \u00e9\u00e9n opmerking over voeding of herstel op basis van de cijfers. Maximaal 130 woorden, geen opsomming van de aangeleverde data, geen medische claims, spreek de atleet aan met je/jij. Sluit af met \u00e9\u00e9n motiverende zin.'}]})
+    });
+    const data=await resp.json();
+    if(data.error) throw new Error(data.error.message||'API-fout');
+    const text=(data.content||[]).map(b=>b.type==='text'?b.text:'').join('').trim();
+    if(!text) throw new Error('leeg antwoord');
+    $('coachout').textContent=text; $('coachout').style.display='block';
+  }catch(err){ $('coachmsg').textContent='Coach niet bereikbaar: '+(err.message||err); }
+  btn.disabled=false; btn.textContent='Vraag de coach om advies';
+};
+
+/* ================= BACKUP ================= */
+$('expbtn').onclick=()=>{
+  const data={v:1, app:'pi27', exportedAt:new Date().toISOString(),
+    profile:S.profile, config:S.config, logs:S.logs, meals:S.meals, costs:S.costs, weights:S.weights, confirmedName:S.confirmedName};
+  const blob=new Blob([JSON.stringify(data,null,1)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download='pi27-backup-'+isoDay(new Date())+'.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  $('bakmsg').textContent='Back-up gedownload — bewaar het bestand ergens veilig (bijv. je cloud-opslag).';
+};
+$('impfile').addEventListener('change', async e=>{
+  const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try{
+    const d=JSON.parse(await f.text());
+    if(d.app!=='pi27') throw new Error('geen PI27-back-up');
+    if(d.profile) S.profile=d.profile;
+    if(d.config) S.config={...S.config,...d.config};
+    if(Array.isArray(d.logs)) S.logs=d.logs;
+    if(Array.isArray(d.meals)) S.meals=d.meals;
+    if(Array.isArray(d.costs)) S.costs=d.costs;
+    if(Array.isArray(d.weights)) S.weights=d.weights;
+    if(d.confirmedName){ S.confirmedName=d.confirmedName; confirmUI(d.confirmedName); }
+    saveProfile(); saveCfg(); saveLogs(); saveMeals(); saveCosts(); saveWeights(); saveConfirm();
+    paintConfig(); buildPlan(); paintProgress(); paintMeals(); renderCosts();
+    if(S.profile){ S.me=S.profile.who; saveMe(); applyMe(); }
+    $('bakmsg').textContent='Back-up hersteld — alles staat weer klaar ('+(S.logs||[]).length+' trainingen, '+(S.costs||[]).length+' kostenposten).';
+  }catch(err){ $('bakmsg').textContent='Herstellen mislukt: '+(err.message||err); }
+});
+
 /* ================= DECISION & CONFETTI ================= */
 const cc=$('confetti'), cctx=cc.getContext('2d');
 function sizeCC(){ cc.width=innerWidth; cc.height=innerHeight; }
@@ -1237,6 +1376,8 @@ $('refresh').onclick = async () => {
   S.profile = await kvGet('pi27-profile', false);
   S.costs = await kvGet('pi27-costs', false);
   S.proxy = (await kvGet('pi27-proxy', false)) || '';
+  const wsv = await kvGet('pi27-weights', false);
+  if(Array.isArray(wsv)) S.weights = wsv;
   if(S.proxy) $('proxyurl').value = S.proxy;
   if(S.profile && S.profile.w) $('fw').value = S.profile.w;
   if(mode==='claude') $('proxypanel').style.display='none';
