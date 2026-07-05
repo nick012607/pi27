@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="nl">
-<head> 
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PI27 — Ironman Mission Control</title>
@@ -299,6 +299,7 @@ footer{padding:34px 56px 54px;color:var(--mut);font-size:12.5px;border-top:1px s
     Jij bent: <span class="st" id="mestatus">&hellip;</span><br>
     Status Omar: <span class="st" id="navstatus">IN BERAAD</span><br>
     Opslag: <span class="st" id="storestatus">&hellip;</span><br>
+    Sync: <span class="st" id="syncbadge">&hellip;</span><br>
     AI-scan: <span class="st" id="aistatus">&hellip;</span><br>
     <button class="btn sec sm" id="refresh" style="margin-top:8px">&#8635; Vernieuw gedeelde data</button><br>
     <button class="btn sec sm" id="editprofile" style="margin-top:6px">Profiel aanpassen</button>
@@ -357,6 +358,13 @@ footer{padding:34px 56px 54px;color:var(--mut);font-size:12.5px;border-top:1px s
     <input type="file" id="impfile" accept=".json,application/json" style="display:none">
     <div class="note" id="bakmsg" style="margin-top:10px"></div>
   </div>
+  <div class="racecfg panel" style="margin-top:18px">
+    <div class="kick" style="margin-bottom:12px">Synchronisatie</div>
+    <div class="note" style="margin-bottom:12px">Logboek, gewicht, kosten en race-instellingen synchroniseren automatisch tussen jullie telefoons zodra er internet is. Maaltijdscans blijven priv&eacute; op je eigen toestel.</div>
+    <button class="btn sec sm" id="syncnow">&#8635; Nu synchroniseren</button>
+    <div class="note" id="syncmsg" style="margin-top:10px" aria-live="polite"></div>
+  </div>
+
 
 
 </div>
@@ -532,7 +540,7 @@ footer{padding:34px 56px 54px;color:var(--mut);font-size:12.5px;border-top:1px s
     <p class="lead">Maak een foto van je bord en de AI schat calorie&euml;n en voedingsstoffen. Werkt binnen Claude; test alles wat je eet in trainingsweken.</p>
     <div class="scangrid">
       <div class="panel">
-        <div class="note" style="margin-bottom:10px">Scanstatus: <span class="st" id="scanstate">&hellip;</span> &middot; app v4.0</div>
+        <div class="note" style="margin-bottom:10px">Scanstatus: <span class="st" id="scanstate">&hellip;</span> &middot; app v5.3</div>
         <label class="drop" id="drop" for="foto">
           <img id="preview" alt="" style="display:none">
           <div id="droptxt">&#128247; Tik hier om een foto te kiezen<br><span class="note">bord, maaltijd of snack</span></div>
@@ -612,6 +620,7 @@ footer{padding:34px 56px 54px;color:var(--mut);font-size:12.5px;border-top:1px s
     <div class="res"><div class="v mono" id="kPaid">&ndash;</div><div class="k">Al uitgegeven</div></div>
     <div class="res"><div class="v mono" id="kCount">&ndash;</div><div class="k">Items geregeld</div></div>
   </div>
+  <div class="panel" id="kcompare" style="margin-bottom:16px;display:none"></div>
   <div class="panel" style="padding:8px 4px" id="costlist"></div>
   <div class="panel" style="margin-top:16px">
     <div class="kick" style="margin-bottom:12px">Eigen kostenpost toevoegen</div>
@@ -661,16 +670,16 @@ let S = {
   profile: null, costs: null, proxy: '', weights: [],
   ath: { N:{swim:140,t1:8,bike:28,t2:6,run:390}, O:{swim:145,t1:8,bike:27,t2:6,run:405} }
 };
-const saveCfg = () => kvSet('pi27-config', S.config, true);
-const saveLogs = () => kvSet('pi27-logs', S.logs, true);
-const saveAth = (() => { let t=null; return () => { clearTimeout(t); t=setTimeout(()=>kvSet('pi27-ath', S.ath, true), 600); }; })();
-const saveConfirm = () => kvSet('pi27-confirm', S.confirmedName, true);
+const saveCfg = () => { kvSet('pi27-config', S.config, true); push('config', S.config); };
+const saveLogs = () => { kvSet('pi27-logs', S.logs, true); push('logs', S.logs); };
+const saveAth = (() => { let t=null; return () => { clearTimeout(t); t=setTimeout(()=>{ kvSet('pi27-ath', S.ath, true); push('ath', S.ath); }, 600); }; })();
+const saveConfirm = () => { kvSet('pi27-confirm', S.confirmedName, true); push('confirm', S.confirmedName); };
 const saveMeals = () => kvSet('pi27-meals', S.meals, false);
 const saveMe = () => kvSet('pi27-me', S.me, false);
 const saveProfile = () => kvSet('pi27-profile', S.profile, false);
-const saveCosts = () => kvSet('pi27-costs', S.costs, false);
+const saveCosts = () => { kvSet('pi27-costs', S.costs, false); push('costs-'+(S.me||'N'), S.costs); };
 const saveProxy = () => kvSet('pi27-proxy', S.proxy, false);
-const saveWeights = () => kvSet('pi27-weights', S.weights, false);
+const saveWeights = () => { kvSet('pi27-weights', S.weights, false); push('weights', S.weights); };
 function bmr(){
   const p=S.profile; if(!p) return null;
   return Math.round(10*p.w + 6.25*p.h - 5*p.age + (p.sex==='v'?-161:5));
@@ -1027,7 +1036,8 @@ function paintProgress(){
   paintWeights();
 }
 function paintWeights(){
-  const ws=[...(S.weights||[])].sort((a,b)=>a.date.localeCompare(b.date));
+  const me=S.me||'N';
+  const ws=[...(S.weights||[])].filter(w=>!w.who||w.who===me).sort((a,b)=>a.date.localeCompare(b.date));
   const svg=$('wchart');
   if(!ws.length){ svg.innerHTML=''; $('wnote').textContent='Nog geen metingen. Vul je gewicht in en volg de trend richting racedag.'; return; }
   const vals=ws.map(w=>w.kg), min=Math.min(...vals)-1, max=Math.max(...vals)+1;
@@ -1041,7 +1051,7 @@ $('wsave').onclick=()=>{
   const kg=+$('wtoday').value; if(!kg||kg<40||kg>160) return;
   const today=isoDay(new Date());
   S.weights=(S.weights||[]).filter(w=>w.date!==today);
-  S.weights.push({date:today, kg:Math.round(kg*10)/10});
+  S.weights.push({date:today, kg:Math.round(kg*10)/10, who:S.me||'N'});
   if(S.profile){ S.profile.w=Math.round(kg); saveProfile(); }   // verbrandingsberekening gebruikt nieuwste gewicht
   saveWeights(); paintWeights(); paintProgress();
 };
@@ -1180,6 +1190,15 @@ function renderCosts(){
   const done = S.costs.filter(c=>c.status!=='nodig').length;
   $('kOpen').textContent=eur(open); $('kPaid').textContent=eur(paid);
   $('kCount').textContent=done+' / '+S.costs.length;
+  const oc=S.otherCosts, meN=(S.me||'N')==='N';
+  if(session && Array.isArray(oc)){
+    const oPaid=oc.filter(c=>c.status==='gehaald').reduce((a,c)=>a+(+c.paid||0),0);
+    const oOpen=oc.filter(c=>c.status==='nodig').reduce((a,c)=>a+c.est,0);
+    $('kcompare').style.display='block';
+    $('kcompare').innerHTML='<div class="kick" style="margin-bottom:10px">Nick vs. Omar</div>'
+      +'<div class="report">'+(meN?'Jij (Nick)':'Nick')+': <b>'+eur(meN?paid:oPaid)+'</b> uitgegeven · <b>'+eur(meN?open:oOpen)+'</b> verwacht<br>'
+      +(meN?'Omar':'Jij (Omar)')+': <b>'+eur(meN?oPaid:paid)+'</b> uitgegeven · <b>'+eur(meN?oOpen:open)+'</b> verwacht</div>';
+  } else { $('kcompare').style.display='none'; }
   $('costlist').innerHTML=S.costs.map(c=>
     '<div class="costrow '+(c.status==='gehaald'?'done':c.status==='niet'?'skip':'')+'">'+
     '<span class="nm">'+c.name+'</span>'+
@@ -1228,7 +1247,7 @@ function coachContext(){
   const today=isoDay(new Date());
   const kcalIn=S.meals.filter(m=>m.date===today).reduce((a,m)=>a+m.kcal,0);
   const kcalSport=logs.filter(l=>l.date===today).reduce((a,l)=>a+burnFor(l),0);
-  const wl=[...(S.weights||[])].sort((a,b)=>a.date.localeCompare(b.date)).slice(-5);
+  const wl=[...(S.weights||[])].filter(w=>!w.who||w.who===who).sort((a,b)=>a.date.localeCompare(b.date)).slice(-5);
   return 'Atleet: '+(who==='N'?'Nick':'Omar')
     +'. Profiel: '+(S.profile?S.profile.age+' jaar, '+S.profile.w+' kg, '+S.profile.h+' cm':'onbekend')
     +'. Doel: '+S.config.name+' op '+S.config.date
@@ -1288,6 +1307,60 @@ $('impfile').addEventListener('change', async e=>{
     $('bakmsg').textContent='Back-up hersteld — alles staat weer klaar ('+(S.logs||[]).length+' trainingen, '+(S.costs||[]).length+' kostenposten).';
   }catch(err){ $('bakmsg').textContent='Herstellen mislukt: '+(err.message||err); }
 });
+
+
+/* ================= SUPABASE SYNC ================= */
+const SB_URL='https://skrfwlkomrdssohhcmuf.supabase.co';
+const SB_KEY='sb_publishable_B_baHroUHjSTc_ZXqY-upg_1HQvk6Fp';
+let session={access_token: SB_KEY}, lastSync=null;   // open sync — geen login
+const syncMsg=t=>{ $('syncmsg').textContent=t||''; };
+function paintSync(){
+  $('syncbadge').textContent='ACTIEF';
+  $('syncbadge').className='st live';
+}
+async function sbRefresh(){ /* geen sessies nodig — open sync */ }
+function sbHeaders(){ return {'apikey':SB_KEY,'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'}; }
+let pushT={};
+function push(key,value){
+  if(!session) return;
+  clearTimeout(pushT[key]);
+  pushT[key]=setTimeout(async()=>{
+    try{
+      let r=await fetch(SB_URL+'/rest/v1/team_data',{method:'POST',
+        headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates'},
+        body:JSON.stringify({key, value, updated_at:new Date().toISOString()})});
+      if(r.status===401){ await sbRefresh(); if(session) fetch(SB_URL+'/rest/v1/team_data',{method:'POST',headers:{...sbHeaders(),'Prefer':'resolution=merge-duplicates'},body:JSON.stringify({key,value,updated_at:new Date().toISOString()})}); }
+    }catch(e){}
+  }, 800);
+}
+function pushAll(){
+  push('config',S.config); push('logs',S.logs); push('weights',S.weights||[]);
+  push('costs-'+(S.me||'N'),S.costs||[]); push('ath',S.ath);
+  if(S.confirmedName) push('confirm',S.confirmedName);
+}
+async function pullAll(quiet){
+  if(!session) return;
+  try{
+    let r=await fetch(SB_URL+'/rest/v1/team_data?select=key,value',{headers:sbHeaders()});
+    if(r.status===401){ await sbRefresh(); if(!session){ paintSync(); return; } r=await fetch(SB_URL+'/rest/v1/team_data?select=key,value',{headers:sbHeaders()}); }
+    const rows=await r.json();
+    if(!Array.isArray(rows)){ if(!quiet) syncMsg('Synchroniseren mislukt — probeer later opnieuw.'); return; }
+    const m={}; rows.forEach(x=>m[x.key]=x.value);
+    if(m.config) S.config={...S.config,...m.config};
+    if(Array.isArray(m.logs)){ const ids=new Set(S.logs.map(l=>l.id)); m.logs.forEach(l=>{ if(!ids.has(l.id)) S.logs.push(l); }); }
+    if(Array.isArray(m.weights)){ const wk=w=>(w.who||'?')+'|'+w.date; const have=new Set((S.weights||[]).map(wk)); m.weights.forEach(w=>{ if(!have.has(wk(w))) S.weights.push(w); }); }
+    const other=(S.me==='N')?'O':'N';
+    if(Array.isArray(m['costs-'+other])) S.otherCosts=m['costs-'+other];
+    if(Array.isArray(m['costs-'+(S.me||'N')]) && (!S.costs||!S.costs.length)) S.costs=m['costs-'+(S.me||'N')];
+    if(m.ath) S.ath={...S.ath,...m.ath};
+    if(m.confirm && !S.confirmedName){ S.confirmedName=m.confirm; confirmUI(m.confirm); }
+    kvSet('pi27-logs',S.logs,true); kvSet('pi27-weights',S.weights,false); kvSet('pi27-config',S.config,true);
+    lastSync=new Date();
+    paintConfig(); buildPlan(); paintProgress(); paintMeals(); renderCosts(); syncSliders();
+    if(!quiet) syncMsg('Gesynchroniseerd om '+lastSync.toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'})+'.');
+  }catch(e){ if(!quiet) syncMsg('Geen verbinding — alles blijft lokaal bewaard.'); }
+}
+$('syncnow').onclick=()=>{ pushAll(); pullAll(); };
 
 /* ================= DECISION & CONFETTI ================= */
 const cc=$('confetti'), cctx=cc.getContext('2d');
@@ -1362,6 +1435,7 @@ $('proxysave').onclick = () => {
 $('refresh').onclick = async () => {
   $('refresh').textContent = 'Vernieuwen\u2026';
   await loadShared();
+  if(session){ pushAll(); await pullAll(true); }
   paintConfig(); buildPlan(); syncSliders(); paintProgress();
   if(S.confirmedName) confirmUI(S.confirmedName);
   $('refresh').innerHTML = '\u21BB Vernieuw gedeelde data';
@@ -1378,6 +1452,8 @@ $('refresh').onclick = async () => {
   S.proxy = (await kvGet('pi27-proxy', false)) || '';
   const wsv = await kvGet('pi27-weights', false);
   if(Array.isArray(wsv)) S.weights = wsv;
+  paintSync();
+  pushAll(); pullAll(true);
   if(S.proxy) $('proxyurl').value = S.proxy;
   if(S.profile && S.profile.w) $('fw').value = S.profile.w;
   if(mode==='claude') $('proxypanel').style.display='none';
