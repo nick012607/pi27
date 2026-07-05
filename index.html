@@ -498,13 +498,14 @@ footer{padding:34px 56px 54px;color:var(--mut);font-size:12.5px;border-top:1px s
     <p class="lead">Maak een foto van je bord en de AI schat calorie&euml;n en voedingsstoffen. Werkt binnen Claude; test alles wat je eet in trainingsweken.</p>
     <div class="scangrid">
       <div class="panel">
+        <div class="note" style="margin-bottom:10px">Scanstatus: <span class="st" id="scanstate">&hellip;</span> &middot; app v3.1</div>
         <label class="drop" id="drop" for="foto">
           <img id="preview" alt="" style="display:none">
           <div id="droptxt">&#128247; Tik hier om een foto te kiezen<br><span class="note">bord, maaltijd of snack</span></div>
         </label>
         <input type="file" id="foto" accept="image/*" style="display:none">
         <button class="btn" id="scan" style="margin-top:14px" disabled>Analyseer maaltijd</button>
-        <div class="note" id="scanmsg" style="margin-top:10px"></div>
+        <div class="note" id="scanmsg" style="margin-top:10px" aria-live="polite"></div>
       </div>
       <div>
         <div class="panel" id="scanres" style="display:none">
@@ -999,23 +1000,42 @@ function nut(){
 
 /* ================= AI FOOD SCAN ================= */
 let scanB64=null, scanResult=null;
-$('drop').addEventListener('click',()=>$('foto').click());
-$('foto').addEventListener('change',e=>{
-  const f=e.target.files[0]; if(!f) return;
-  const img=new Image();
-  img.onload=()=>{
+async function decodeFile(f){
+  // 1e poging: createImageBitmap (snelst, breedste formaat-ondersteuning)
+  try{ return await createImageBitmap(f); }catch(e){}
+  // 2e poging: klassiek Image-element
+  return await new Promise((res, rej)=>{
+    const img=new Image();
+    const u=URL.createObjectURL(f);
+    img.onload=()=>{ res(img); URL.revokeObjectURL(u); };
+    img.onerror=()=>{ URL.revokeObjectURL(u); rej(new Error('decode')); };
+    img.src=u;
+  });
+}
+$('foto').addEventListener('change', async e=>{
+  const f=e.target.files[0];
+  e.target.value='';                       // zelfde foto opnieuw kiezen blijft mogelijk
+  if(!f) return;
+  scanB64=null; $('scan').disabled=true;
+  $('scanmsg').textContent='Foto verwerken\u2026';
+  try{
+    const img=await decodeFile(f);
+    const w=img.width||img.naturalWidth, h=img.height||img.naturalHeight;
+    if(!w||!h) throw new Error('leeg');
+    const sc=Math.min(1,1100/Math.max(w,h));
     const c=document.createElement('canvas');
-    const sc=Math.min(1,1100/Math.max(img.width,img.height));
-    c.width=img.width*sc; c.height=img.height*sc;
+    c.width=Math.round(w*sc); c.height=Math.round(h*sc);
     c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    if(img.close) img.close();
     const url=c.toDataURL('image/jpeg',0.82);
     scanB64=url.split(',')[1];
     $('preview').src=url; $('preview').style.display='block';
     $('droptxt').innerHTML='<span class="note">Andere foto kiezen? Tik opnieuw.</span>';
-    $('scan').disabled=false; $('scanmsg').textContent='';
-    URL.revokeObjectURL(img.src);
-  };
-  img.src=URL.createObjectURL(f);
+    $('scan').disabled=false;
+    $('scanmsg').textContent='Foto geladen ('+(f.size/1048576).toFixed(1)+' MB) \u2014 druk op Analyseer maaltijd.';
+  }catch(err){
+    $('scanmsg').textContent='Deze foto kan de browser niet lezen (waarschijnlijk HEIC-formaat van de iPhone-camera). Oplossing: zet in Instellingen \u2192 Camera \u2192 Structuur op \u201CMeest compatibel\u201D, of maak een schermafbeelding van de foto en kies die.';
+  }
 });
 const SCAN_PROXY_URL = 'https://pi27-scan.nick-2601.workers.dev'; // vaste scan-proxy van Nick
 $('scan').onclick=async()=>{
@@ -1226,6 +1246,8 @@ $('refresh').onclick = async () => {
   const scanOK = mode==='claude' || S.proxy || SCAN_PROXY_URL;
   $('aistatus').textContent = scanOK ? 'BESCHIKBAAR' : 'PROXY NODIG';
   $('aistatus').className = 'st ' + (scanOK ? 'live' : 'mem');
+  $('scanstate').textContent = scanOK ? 'BESCHIKBAAR' : 'PROXY NODIG';
+  $('scanstate').className = 'st ' + (scanOK ? 'live' : 'mem');
   paintConfig(); buildPlan(); syncSliders();
   fillRow('rowO',calc(S.ath.O)); fillRow('rowN',calc(S.ath.N));
   nut(); paintMeals(); paintProgress();
