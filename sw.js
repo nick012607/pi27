@@ -1,4 +1,4 @@
-// PI27 service worker — bump VERSION bij elke update zodat telefoons de nieuwe versie ophalen 
+// PI27 service worker — bump VERSION bij elke update zodat telefoons de nieuwe versie ophalen
 const VERSION = 'pi27-v9';
 const ASSETS = ['./index.html','./manifest.json','./icon-192.png','./icon-512.png'];
 self.addEventListener('install', e => {
